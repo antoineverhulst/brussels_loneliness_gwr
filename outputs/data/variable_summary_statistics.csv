@@ -1,0 +1,9 @@
+Variable,N,Mean,Std Dev,Min,Max,Missing
+part_des_isoles_de_30_ans_et_plus_dans_le_total_des_menages_prives,626,37.287507987220444,7.294710380812672,12.98,62.82,75
+distance_moyenne_dacces_aux_4_biens_de_base,700,242.84137142857145,209.96990541389127,45.94,3235.37,1
+part_de_leurope_des_14_hors_belgique,626,16.14199680511182,10.026433575623479,1.74,45.68,75
+part_des_30_44_ans_dans_la_population_totale,626,23.300766773162938,5.565009086346421,1.57,47.2,75
+part_des_65_ans_et_plus_dans_la_population_totale,626,13.975654952076678,6.657305999452888,0.79,75.29,75
+part_des_logements_ayant_acces_a_un_jardin_prive,636,34.174606918239,22.207992652207867,1.22,97.79,65
+revenu_equivalent_median_des_habitants_apres_impot,654,18244.18747706422,3651.7492303321496,3911.43,28278.63,47
+taux_de_croissance_annuel_moyen_de_la_population,627,1.1739872408293461,4.70656176981963,-17.18,66.49,74
