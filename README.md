@@ -51,6 +51,9 @@ Variable names follow the French naming convention from the Brussels Perspective
 ├── requirements.txt                                 # Python dependencies
 ├── README.md                                        # This file
 ├── .gitignore
+├── skills/
+│   └── gwr-analysis/
+│       └── SKILL.md                                 # Claude Code skill — reuse this methodology on your own data
 └── outputs/
     ├── figures/
     │   ├── metrics_grid.png
@@ -136,6 +139,34 @@ All generated files are saved in `outputs/`:
 | `data/gwr_synthesis_table.csv` | Full Table 5 data |
 | `data/high_cn_areas.csv` | Sectors with condition number above threshold |
 | `maps/gwr_results.geojson` | GeoJSON: all GWR local coefficients |
+
+---
+
+## Reusing This Methodology (Claude Code Skill)
+
+`skills/gwr-analysis/SKILL.md` is a [Claude Code](https://claude.ai/claude-code) skill that captures the complete GWR methodology from this project in a reusable form. It covers:
+
+- Generic data loading (CSV, shapefile, GeoJSON — not Brussels-specific)
+- Variable selection, multicollinearity screening, and standardisation
+- OLS vs. GWR decision rule (Moran's I on residuals)
+- Bandwidth selection with `mgwr.sel_bw.Sel_BW` or fixed radius
+- Manual GWR fitting loop (sklearn, works on Python 3.12+ / NumPy 2.x)
+- FDR correction + condition number masking for local significance
+- Moran's I on local coefficient surfaces (spatial nonstationarity test)
+- Publication-quality table and map templates
+- Performance guidance for large datasets (n > 2,000)
+
+**To run a GWR on your own dataset using Claude Code:**
+
+```bash
+# From your project directory, copy the skill file
+cp path/to/brussels_loneliness_gwr/skills/gwr-analysis/SKILL.md .
+
+# Then in Claude Code
+/gwr-analysis
+```
+
+Claude will read the skill and guide you through applying the full methodology to your data.
 
 ---
 
