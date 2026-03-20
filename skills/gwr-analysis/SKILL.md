@@ -140,6 +140,46 @@ analysis_df = gdf.pivot_table(
 analysis_df.columns = [col.replace('-', '_') for col in analysis_df.columns]
 ```
 
+### 1.6 Alternative: Loading Data from File
+
+Use this when your data is already in a CSV, shapefile, or GeoJSON — not fetched from an API.
+The downstream code (§3–§9) is identical regardless of data source.
+
+```python
+# ── Option A: CSV with lat/lon columns ─────────────────────────────────────
+df  = pd.read_csv('data.csv')
+gdf = gpd.GeoDataFrame(
+    df,
+    geometry=gpd.points_from_xy(df['longitude'], df['latitude']),
+    crs='EPSG:4326',          # WGS84 if coordinates are decimal degrees
+).to_crs('EPSG:XXXXX')        # re-project to a local CRS in metres
+
+# ── Option B: Shapefile or GeoJSON (attributes already joined) ──────────────
+gdf = gpd.read_file('sectors.shp')   # or .geojson
+if gdf.crs.to_epsg() != XXXXX:       # your target EPSG
+    gdf = gdf.to_crs('EPSG:XXXXX')
+
+# ── Option C: Separate spatial and attribute files ──────────────────────────
+gdf_spatial   = gpd.read_file('sectors.geojson')
+df_attributes = pd.read_csv('attributes.csv')   # must share a key column
+gdf = gdf_spatial.merge(df_attributes, on='sector_id', how='left')
+gdf = gdf.to_crs('EPSG:XXXXX')
+
+# ── After any loading method — verify before proceeding ────────────────────
+print(gdf.crs)                                         # confirm projected CRS
+print(f'{len(gdf)} observations, {gdf.shape[1]} columns')
+print(gdf[[dep_var] + indep_vars].isna().sum())        # NaN counts per column
+```
+
+**Key requirement:** The GeoDataFrame must be in a **projected CRS (metres)**
+before GWR. Pass the EPSG code of your country's national grid (e.g. 27700 for
+British National Grid, 2154 for French Lambert-93, 31370 for Belgian Lambert 72).
+Never run GWR in EPSG:4326 (degrees) — the bandwidth will be meaningless.
+
+The result in all three cases is a wide-format GeoDataFrame with one row per
+geographic unit (sector / municipality / ward) and one column per variable,
+matching the format produced by §1.5.
+
 ---
 
 ## 2. Known Bugs and Fixes
@@ -254,7 +294,34 @@ indep_vars = [col for col in regression_df.columns
               if col not in ['id', 'name', dep_var] + excluded_vars]
 ```
 
-### Step 5 — Standardise before regression
+### Step 5 — Check sample size before proceeding
+
+| Situation | Recommendation |
+|---|---|
+| n < 100 | Do not run GWR. Use OLS only. |
+| 100 ≤ n < 300 | GWR results are unreliable. Treat as exploratory only. |
+| n ≥ 300, p ≤ 10 | GWR is appropriate. |
+| n ≥ 1 000, p > 10 | GWR becomes computationally intensive (see §10). |
+
+**Effective local sample size:** Each local model is estimated from all n
+observations weighted by distance. For a fixed 5,000 m bandwidth in a compact
+urban area (Brussels: ~700 sectors, ~3 km radius), the effective local n is
+roughly 150–250. Verify that this is at least 10× the number of predictors.
+
+```python
+# After Sel_BW, monitor whether the adaptive bandwidth is suspiciously large
+k_ratio = k_optimal / len(coords)
+if k_ratio > 0.30:
+    print(f'WARNING: bandwidth uses {k_ratio:.0%} of all obs — '
+          f'local models are nearly global. GWR may not add value over OLS.')
+```
+
+**p-to-n rule:** For p predictors, you need at least 10p complete observations
+for OLS. For GWR, apply the same rule to the *effective local n* (≈ half the
+obs within bandwidth), not total n. With p = 7 and bandwidth covering 200
+sectors, effective local n ≈ 200 >> 70 → acceptable.
+
+### Step 6 — Standardise before regression
 
 ```python
 scaler_X = StandardScaler()
@@ -276,7 +343,58 @@ standardization_info = {
 
 ---
 
-## 4. Bandwidth Selection
+## 4. Deciding Between OLS and GWR
+
+Run OLS first. GWR is only warranted if OLS leaves spatial structure in
+the residuals.
+
+### Decision flowchart
+
+```
+Run OLS
+  │
+  ├─ Moran's I on residuals significant (p < 0.05)?
+  │     NO  → OLS is sufficient. Stop here.
+  │     YES → spatial autocorrelation in residuals → proceed to GWR
+  │
+  ├─ n ≥ 300?
+  │     NO  → sample too small for reliable GWR. Report OLS with spatial lag.
+  │     YES → continue
+  │
+  └─ Run GWR. Check effective coverage per variable:
+        0% for all variables → bandwidth too large or relationships are global.
+                               Report OLS; GWR adds noise.
+        0% for one variable  → that variable has no spatially varying effect;
+                               drop from GWR or report it as globally non-significant.
+        > 0% for ≥ 1 variable → report GWR alongside OLS.
+```
+
+### What "0% effective coverage" means
+
+A variable has 0% effective coverage when, after FDR correction and CN masking,
+**no sector** has a locally significant and numerically stable coefficient.
+This can mean:
+
+1. **Globally irrelevant:** the variable does not predict Y anywhere.
+   → Drop from GWR; consider dropping from OLS too.
+2. **Globally uniform:** the effect is the same everywhere, but not locally
+   distinguishable from noise at sector level.
+   → Keep in OLS (where global power is higher), exclude from GWR narrative.
+3. **Bandwidth too large:** all local models look like the global OLS model.
+   → Try a smaller bandwidth and re-check.
+4. **Sample too small:** effective local n is too low to detect anything.
+   → Report as inconclusive.
+
+### When Moran's I on OLS residuals is ambiguous
+
+If Moran's I p-value is between 0.01 and 0.10, run both OLS and GWR and
+compare AICc (lower is better). If GWR AICc > OLS AICc + 3, prefer OLS.
+Manual AICc computation for the custom sklearn GWR is complex; use the
+Moran's I threshold as the primary decision rule.
+
+---
+
+## 5. Bandwidth Selection
 
 ### Option A — Automated (mgwr Sel_BW, recommended)
 
@@ -331,7 +449,55 @@ bandwidth applies the same kernel radius everywhere.
 
 ---
 
-## 5. GWR Fitting Loop (Manual sklearn Implementation)
+## 6. GWR Fitting Loop (Manual sklearn Implementation)
+
+### 6.0 Setup: Build gdf_gwr, extract coords, X, and y
+
+This is the critical bridge between data loading (§1) and the fitting loop.
+Every downstream cell references `gdf_gwr`, `coords`, `X`, `y`, `indep_vars`.
+
+```python
+# 1. Drop rows with missing values in regression variables
+regression_data = (
+    gdf[['id', 'name', 'geometry', dep_var] + indep_vars]
+    .dropna()
+    .reset_index(drop=True)
+)
+print(f'{len(regression_data)} complete obs '
+      f'(dropped {len(gdf) - len(regression_data)} with NaN)')
+
+# 2. Standardise (do this AFTER pivot, AFTER dropna)
+X_raw = regression_data[indep_vars].values
+y_raw = regression_data[dep_var].values
+scaler_X = StandardScaler()
+scaler_y = StandardScaler()
+X = scaler_X.fit_transform(X_raw)
+y = scaler_y.fit_transform(y_raw.reshape(-1, 1)).ravel()
+
+# 3. GWR GeoDataFrame — keeps geometry aligned with X/y row indices
+gdf_gwr = regression_data.copy()
+
+# 4. Centroid coordinates in projected CRS (metres)
+#    CRITICAL: geometry must be in a projected CRS, not EPSG:4326
+gdf_proj = gdf_gwr.to_crs('EPSG:31370')   # substitute your national CRS
+coords = np.column_stack([
+    gdf_proj.geometry.centroid.x,
+    gdf_proj.geometry.centroid.y,
+])
+
+# 5. Pre-compute full distance matrix (O(n²) — compute ONCE, reuse everywhere)
+distances = cdist(coords, coords)   # shape (n_obs, n_obs), values in metres
+
+n_obs = len(coords)
+print(f'coords: {coords.shape} | distances: {distances.shape}')
+print(f'Dist range: {distances[distances > 0].min():.0f}m – {distances.max():.0f}m')
+```
+
+**Row alignment is mandatory.** After `dropna().reset_index(drop=True)`, row
+`i` of `X`, `y`, `coords`, and `gdf_gwr` must all refer to the same
+observation. Never sort or filter these arrays independently after this point.
+
+### 6.1 The Fitting Loop
 
 ```python
 # Pre-compute distance matrix ONCE before the loop
@@ -397,9 +563,65 @@ for i, var in enumerate(indep_vars):
 **Naming convention:** coefficients stored as `coef_{snake_case_var_name}` —
 used consistently in all downstream cells.
 
+### 6.2 Moran's I on Local GWR Coefficients (Spatial Nonstationarity Test)
+
+This is the key diagnostic that **justifies GWR over OLS**. A significant
+Moran's I on a coefficient surface means the effect of that variable is not
+randomly distributed across space — it varies in a spatially structured way.
+
+```python
+from libpysal.weights import Queen
+from esda.moran import Moran
+
+# Compute spatial weights once from the full GWR GeoDataFrame
+w = Queen.from_dataframe(gdf_gwr, silence_warnings=True)
+w.transform = 'r'   # row-standardise
+
+moran_coef_results = {}
+
+for var in indep_vars:
+    col    = f'coef_{var}'
+    values = gdf_gwr[col].values
+    valid  = ~np.isnan(values)
+
+    if valid.sum() < 30:
+        print(f'{var}: too few valid obs ({valid.sum()}) — skipping Moran')
+        continue
+
+    # Subset weights matrix to non-NaN observations
+    w_sub = Queen.from_dataframe(
+        gdf_gwr[valid].reset_index(drop=True), silence_warnings=True
+    )
+    w_sub.transform = 'r'
+
+    mi = Moran(values[valid], w_sub, permutations=999)
+    moran_coef_results[var] = {
+        'Moran I': round(mi.I, 3),
+        'p-value': round(mi.p_sim, 4),
+    }
+    sig = '✓ spatial structure' if mi.p_sim < 0.05 else '✗ no structure'
+    print(f'{var}: I = {mi.I:.3f}, p = {mi.p_sim:.4f}  {sig}')
+```
+
+**Interpretation table:**
+
+| Moran's I on coefficient | p-value | Meaning |
+|---|---|---|
+| > 0, p < 0.05 | Significant | Effect varies **smoothly** across space → GWR is justified |
+| ≈ 0, p ≥ 0.05 | Not significant | Effect is spatially random → this variable behaves globally |
+| < 0, p < 0.05 | Significant | Negative spatial autocorrelation (checkerboard) — rare, investigate |
+
+**Report these values in your GWR statistics table (Table 3).** A variable
+with Moran's I p ≥ 0.05 on its coefficient surface should be flagged as
+"globally uniform" in the synthesis table — its local coefficients are not
+spatially structured even if they vary numerically.
+
+**Workflow position:** Run after the GWR fitting loop, before FDR correction.
+The Moran's I result informs which variables deserve detailed interpretation.
+
 ---
 
-## 6. FDR Correction and CN Masking
+## 7. FDR Correction and CN Masking
 
 ### 6.1 Why FDR over Bonferroni
 
@@ -502,7 +724,7 @@ for var in indep_vars:
 
 ---
 
-## 7. Publication-Quality Table Template
+## 8. Publication-Quality Table Template
 
 Used for OLS results (Table 2), GWR statistics (Table 3), and synthesis
 (Table 5). Key parameters that produce the academic look:
@@ -620,7 +842,7 @@ gdf_gwr.plot(column=f'coef_{var}', ax=ax, cmap='RdBu_r',
 
 ---
 
-## 8. Narrative Interpretation for Non-Technical Audiences
+## 9. Narrative Interpretation for Non-Technical Audiences
 
 ### OLS results
 > "The global model explains **X%** of the variation in isolation rates across
@@ -665,7 +887,7 @@ gdf_gwr.plot(column=f'coef_{var}', ax=ax, cmap='RdBu_r',
 
 ---
 
-## 9. Common Pitfalls to Avoid
+## 10. Common Pitfalls to Avoid
 
 ### Data
 - **Mixing CRS:** always use a projected CRS (metres) for GWR. Never pass
@@ -719,6 +941,52 @@ gdf_gwr.plot(column=f'coef_{var}', ax=ax, cmap='RdBu_r',
   labels. The internal names are data infrastructure, not final output.
 - **Saving tables without `facecolor='white'`:** transparent backgrounds
   produce grey PDFs. Always pass `facecolor='white'` to `savefig`.
+
+### Performance (large n)
+
+The manual sklearn GWR loop is O(n²) in memory (distance matrix) and O(n × n × p)
+in compute. This is fine up to n ≈ 2,000 sectors; it becomes slow or infeasible
+for larger datasets.
+
+| n | Distance matrix size | Approx. runtime | Recommendation |
+|---|---|---|---|
+| < 500 | < 2 MB | seconds | Direct approach |
+| 500–2,000 | 2–32 MB | 1–5 min | Direct approach |
+| 2,000–10,000 | 32 MB–800 MB | 5–60 min | Sparse distance cutoff |
+| > 10,000 | > 800 MB | Hours / OOM | Grid subsampling or mgwr on Py 3.11 |
+
+**Mitigations:**
+
+```python
+# ── Sparse cutoff: only compute distances within a threshold ────────────────
+from sklearn.neighbors import BallTree
+import numpy as np
+
+tree    = BallTree(np.radians(coords) if spherical else coords)
+CUTOFF  = 3 * bandwidth     # metres; beyond this weight ≈ 0
+indices = tree.query_radius(coords, r=CUTOFF)   # list of neighbour arrays
+
+# In the loop: only compute weights for neighbours, zero elsewhere
+for i in range(n_obs):
+    nbrs    = indices[i]
+    w_local = np.zeros(n_obs)
+    d_local = np.linalg.norm(coords[nbrs] - coords[i], axis=1)
+    w_local[nbrs] = np.exp(-(d_local / bandwidth) ** 2)
+    model_local.fit(X, y, sample_weight=w_local)
+```
+
+```python
+# ── Grid subsampling: fit GWR on a subset, interpolate to all units ─────────
+# 1. Create a regular grid of focal points covering the study area
+# 2. Fit GWR only at grid points (n_grid << n_obs)
+# 3. Interpolate coefficients to all observations (e.g. IDW or kriging)
+# This is the standard approach in commercial GWR software for large n.
+```
+
+- **Use mgwr on Python 3.11:** `mgwr` is C-accelerated and handles n > 10,000
+  efficiently. Pin `numpy<2.0` and use a Python 3.11 environment (see §2.1).
+- **Parallelise the loop:** the local models are independent — use
+  `joblib.Parallel(n_jobs=-1)` to distribute across CPU cores.
 
 ---
 
