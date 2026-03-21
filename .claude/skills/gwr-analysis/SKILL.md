@@ -1,3 +1,13 @@
+---
+name: gwr-analysis
+description: >
+  Run a complete GWR (Geographically Weighted Regression) analysis in Python.
+  Covers data loading, variable selection, OLS baseline, Moran's I spatial
+  autocorrelation tests, manual GWR fitting, FDR significance masking,
+  publication-quality maps and tables. Works on any spatial dataset —
+  not just Brussels data.
+argument-hint: "[path/to/data or description of dataset]"
+---
 # GWR Analysis in Python — Complete Methodology Skill
 
 Derived entirely from the Brussels loneliness isolation study

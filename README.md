@@ -51,9 +51,10 @@ Variable names follow the French naming convention from the Brussels Perspective
 ├── requirements.txt                                 # Python dependencies
 ├── README.md                                        # This file
 ├── .gitignore
-├── skills/
-│   └── gwr-analysis/
-│       └── SKILL.md                                 # Claude Code skill — reuse this methodology on your own data
+├── .claude/
+│   └── skills/
+│       └── gwr-analysis/
+│           └── SKILL.md                             # Claude Code skill — auto-loaded when you open this project
 └── outputs/
     ├── figures/
     │   ├── metrics_grid.png
@@ -159,14 +160,15 @@ All generated files are saved in `outputs/`:
 **To run a GWR on your own dataset using Claude Code:**
 
 ```bash
-# From your project directory, copy the skill file
-cp path/to/brussels_loneliness_gwr/skills/gwr-analysis/SKILL.md .
+# Clone the repo — the skill is auto-loaded in .claude/skills/
+git clone https://github.com/antoineverhulst/brussels_loneliness_gwr.git
+cd brussels_loneliness_gwr
 
-# Then in Claude Code
-/gwr-analysis
+# Then in Claude Code, invoke the skill with your data
+/gwr-analysis path/to/your_data.csv
 ```
 
-Claude will read the skill and guide you through applying the full methodology to your data.
+Claude will read the skill and guide you through applying the full methodology to your data. The skill is stored at `.claude/skills/gwr-analysis/SKILL.md` and is automatically available to Claude Code in this project.
 
 ---
 
