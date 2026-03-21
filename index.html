@@ -1,0 +1,716 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Bruxelles Solitaire</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;1,400;1,700&family=Source+Serif+4:ital,opsz,wght@0,8..60,300;0,8..60,400;1,8..60,300;1,8..60,400&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --ink:          #18160f;
+      --ink-mid:      #47443a;
+      --ink-faint:    #96907f;
+      --paper:        #faf7f0;
+      --paper-warm:   #f2ebe0;
+      --rule:         #ddd5c3;
+      --accent:       #b03a2e;
+      --accent-light: #f5e9e7;
+      --max-w:        680px;
+      --wide-w:       940px;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { font-size: 18px; scroll-behavior: smooth; }
+    body {
+      background: var(--paper);
+      color: var(--ink);
+      font-family: 'Source Serif 4', Georgia, serif;
+      font-weight: 300;
+      line-height: 1.8;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* TOP BAR */
+    .top-bar { height: 3px; background: var(--ink); width: 100%; }
+
+    /* MASTHEAD */
+    .masthead {
+      border-bottom: 1px solid var(--rule);
+      padding: 1.25rem 2rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      max-width: var(--wide-w);
+      margin: 0 auto;
+    }
+    .masthead-site {
+      font-family: 'DM Sans', sans-serif;
+      font-size: 0.65rem;
+      font-weight: 500;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: var(--ink-faint);
+    }
+    .masthead-date {
+      font-family: 'DM Sans', sans-serif;
+      font-size: 0.65rem;
+      color: var(--ink-faint);
+    }
+
+    /* HERO */
+    .hero {
+      max-width: var(--wide-w);
+      margin: 0 auto;
+      padding: 4rem 2rem 3rem;
+      border-bottom: 1px solid var(--rule);
+    }
+    .kicker {
+      font-family: 'DM Sans', sans-serif;
+      font-size: 0.65rem;
+      font-weight: 500;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin-bottom: 1.5rem;
+    }
+    .hero h1 {
+      font-family: 'Playfair Display', Georgia, serif;
+      font-size: clamp(2.8rem, 6vw, 4.5rem);
+      font-weight: 700;
+      line-height: 1.08;
+      letter-spacing: -0.02em;
+      color: var(--ink);
+      max-width: 680px;
+      margin-bottom: 1.5rem;
+    }
+    .hero h1 em { font-style: italic; color: var(--accent); }
+    .hero-deck {
+      font-size: 1.15rem;
+      line-height: 1.65;
+      color: var(--ink-mid);
+      max-width: 560px;
+      margin-bottom: 2.5rem;
+      font-weight: 300;
+    }
+    .hero-meta {
+      display: flex;
+      align-items: center;
+      gap: 1.5rem;
+      padding-top: 1.5rem;
+      border-top: 1px solid var(--rule);
+    }
+    .hero-meta-author {
+      font-family: 'DM Sans', sans-serif;
+      font-size: 0.8rem;
+      color: var(--ink-mid);
+    }
+    .hero-meta-author strong { font-weight: 500; color: var(--ink); }
+    .hero-meta-divider { width: 1px; height: 2rem; background: var(--rule); }
+    .hero-meta-info {
+      font-family: 'DM Sans', sans-serif;
+      font-size: 0.75rem;
+      color: var(--ink-faint);
+      line-height: 1.5;
+    }
+    .hero-meta-info a { color: inherit; }
+
+    /* LAYOUT */
+    .article-wrap {
+      max-width: var(--wide-w);
+      margin: 0 auto;
+      padding: 0 2rem;
+      display: grid;
+      grid-template-columns: 1fr 190px;
+      gap: 4rem;
+      align-items: start;
+    }
+    .article-body { padding: 3rem 0 6rem; min-width: 0; }
+
+    /* SIDEBAR TOC */
+    .sidebar { padding-top: 3rem; position: sticky; top: 2rem; }
+    .toc-label {
+      font-family: 'DM Sans', sans-serif;
+      font-size: 0.6rem;
+      font-weight: 500;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--ink-faint);
+      margin-bottom: 0.75rem;
+      padding-bottom: 0.5rem;
+      border-bottom: 1px solid var(--rule);
+    }
+    .toc a {
+      display: block;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 0.75rem;
+      color: var(--ink-mid);
+      text-decoration: none;
+      padding: 0.35rem 0;
+      border-bottom: 1px solid var(--paper-warm);
+      transition: color 0.2s;
+      line-height: 1.4;
+    }
+    .toc a:hover { color: var(--accent); }
+
+    /* PROSE */
+    .article-body p { margin-bottom: 1.5rem; font-size: 1rem; }
+    .article-body ul { margin: 1.25rem 0 1.5rem 1.5rem; line-height: 2; }
+    .article-body a { color: var(--accent); text-decoration: none; }
+    .article-body a:hover { text-decoration: underline; }
+
+    .article-body h2 {
+      font-family: 'Playfair Display', Georgia, serif;
+      font-size: 1.65rem;
+      font-weight: 700;
+      line-height: 1.2;
+      letter-spacing: -0.01em;
+      margin: 3.5rem 0 1.25rem;
+      padding-top: 2rem;
+      border-top: 2px solid var(--ink);
+    }
+    .article-body h2:first-child { margin-top: 0; padding-top: 0; border-top: none; }
+
+    /* Drop cap */
+    .drop-cap::first-letter {
+      font-family: 'Playfair Display', Georgia, serif;
+      font-size: 4rem;
+      font-weight: 700;
+      line-height: 0.75;
+      float: left;
+      margin: 0.1em 0.08em 0 0;
+      color: var(--accent);
+    }
+
+    /* PULL QUOTE */
+    .pullquote {
+      margin: 2.5rem -1rem;
+      padding: 1.75rem 2rem;
+      border-left: 3px solid var(--accent);
+      background: var(--accent-light);
+    }
+    .pullquote p {
+      font-family: 'Playfair Display', Georgia, serif;
+      font-size: 1.15rem;
+      font-style: italic;
+      line-height: 1.6;
+      color: var(--ink);
+      margin: 0 !important;
+    }
+
+    /* STAT ROW */
+    .stat-row {
+      display: flex;
+      gap: 0;
+      margin: 2.5rem 0;
+      border-top: 2px solid var(--ink);
+      border-bottom: 1px solid var(--rule);
+      background: var(--paper-warm);
+    }
+    .stat {
+      flex: 1;
+      text-align: center;
+      padding: 1.5rem 1rem;
+      border-right: 1px solid var(--rule);
+    }
+    .stat:last-child { border-right: none; }
+    .stat-number {
+      font-family: 'Playfair Display', Georgia, serif;
+      font-size: 2.2rem;
+      font-weight: 700;
+      color: var(--accent);
+      line-height: 1;
+      display: block;
+    }
+    .stat-label {
+      font-family: 'DM Sans', sans-serif;
+      font-size: 0.68rem;
+      color: var(--ink-mid);
+      margin-top: 0.4rem;
+      line-height: 1.4;
+    }
+
+    /* FIGURES */
+    .fig { margin: 2.5rem 0; }
+    .fig-wide { margin: 2.5rem -2rem; }
+    .fig img { width: 100%; display: block; border: 1px solid var(--rule); }
+    .fig-placeholder {
+      width: 100%;
+      background: var(--paper-warm);
+      border: 1px dashed var(--rule);
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 0.6rem;
+      padding: 3rem 1rem;
+      color: var(--ink-faint);
+      min-height: 200px;
+    }
+    .fig-placeholder svg { opacity: 0.3; }
+    .fig-placeholder-label {
+      font-family: 'DM Sans', sans-serif;
+      font-size: 0.72rem;
+      letter-spacing: 0.04em;
+    }
+    .fig figcaption {
+      margin-top: 0.6rem;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 0.72rem;
+      color: var(--ink-faint);
+      line-height: 1.5;
+    }
+    .fig figcaption strong { color: var(--ink-mid); font-weight: 500; }
+
+    /* REFERENCES */
+    .references {
+      margin-top: 4rem;
+      padding-top: 2rem;
+      border-top: 2px solid var(--rule);
+    }
+    .references-label {
+      font-family: 'DM Sans', sans-serif;
+      font-size: 0.6rem;
+      font-weight: 500;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--ink-faint);
+      margin-bottom: 1rem;
+    }
+    .references ol { padding-left: 1.25rem; }
+    .references li {
+      font-family: 'DM Sans', sans-serif;
+      font-size: 0.78rem;
+      color: var(--ink-mid);
+      margin-bottom: 0.6rem;
+      line-height: 1.6;
+    }
+    .references a { color: var(--accent); text-decoration: none; }
+    .references a:hover { text-decoration: underline; }
+
+    /* FOOTER */
+    footer {
+      background: var(--ink);
+      padding: 2.5rem 2rem;
+      text-align: center;
+    }
+    footer p {
+      font-family: 'DM Sans', sans-serif;
+      font-size: 0.75rem;
+      color: #888;
+      line-height: 1.7;
+    }
+    footer a { color: #bbb; text-decoration: none; }
+    footer a:hover { color: white; }
+
+    /* ANIMATIONS */
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(16px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    .hero h1   { animation: fadeUp 0.7s ease both; }
+    .hero-deck { animation: fadeUp 0.7s 0.12s ease both; }
+    .hero-meta { animation: fadeUp 0.7s 0.22s ease both; }
+
+    /* RESPONSIVE */
+    @media (max-width: 720px) {
+      .article-wrap { grid-template-columns: 1fr; gap: 0; }
+      .sidebar { display: none; }
+      .fig-wide { margin: 2rem 0; }
+      .pullquote { margin: 2rem 0; }
+      .stat-row { flex-direction: column; }
+      .stat { border-right: none; border-bottom: 1px solid var(--rule); }
+      .stat:last-child { border-bottom: none; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="top-bar"></div>
+
+<nav class="masthead">
+  <span class="masthead-site">Analyse Urbaine · Bruxelles</span>
+  <span class="masthead-date">2026</span>
+</nav>
+
+<header class="hero">
+  <p class="kicker">Data Journalism · Isolement Social · Bruxelles</p>
+  <h1>Bruxelles<br /><em>Solitaire</em></h1>
+  <p class="hero-deck">
+    Qui vit seul à Bruxelles, et pourquoi ? Une analyse spatiale quartier par quartier
+    des ménages isolés dans la capitale belge, à partir des données ouvertes de perspective.brussels.
+  </p>
+  <div class="hero-meta">
+    <div class="hero-meta-author">Par <strong>Antoine Verhulst</strong></div>
+    <div class="hero-meta-divider"></div>
+    <div class="hero-meta-info">
+      Données : <a href="https://monitoringdesquartiers.brussels">monitoringdesquartiers.brussels</a><br />
+      Méthode : OLS &amp; Geographical Weighted Regression
+    </div>
+  </div>
+</header>
+
+<div class="article-wrap">
+
+  <aside class="sidebar">
+    <p class="toc-label">Sommaire</p>
+    <nav class="toc">
+      <a href="#intro">Introduction</a>
+      <a href="#donnees">Source de données</a>
+      <a href="#isolement">L'isolement à Bruxelles</a>
+      <a href="#ols">Régression OLS</a>
+      <a href="#gwr">Régression GWR</a>
+      <a href="#conclusion">Conclusion</a>
+      <a href="#references">Références</a>
+    </nav>
+  </aside>
+
+  <article class="article-body">
+
+    <section id="intro">
+      <h2>Introduction</h2>
+
+      <p class="drop-cap">
+        En 1995, le sociologue américain Robert Putnam alarmait sur le déclin des liens sociaux
+        et de l'engagement civique aux États-Unis. Dans son essai <em>Bowling Alone</em>, l'auteur
+        soulignait l'importance du tissu social pour la résilience d'une société — du taux de
+        pauvreté à la consommation de drogue en passant par le niveau de santé.
+      </p>
+
+      <p>
+        La même année, une vague de chaleur sans précédent frappait Chicago et entraînait un
+        nombre de morts inattendu et déstabilisant. La part anormalement élevée de personnes
+        âgées vivant seules parmi les victimes interpella le sociologue Eric Klinenberg, qui
+        publia une analyse sociologique de l'événement mettant en évidence le lien entre
+        mortalité et isolement social.
+      </p>
+
+      <div class="pullquote">
+        <p>
+          « La solidité d'une population ne peut être mesurée qu'à des moments extraordinaires —
+          mais le délitement de la cohésion sociale détériore de nombreux indicateurs permanents
+          du bien-être général. »
+        </p>
+      </div>
+
+      <p>
+        Si ces analyses datent et concernent les États-Unis, il est très probable que les mêmes
+        conclusions s'appliquent à l'Europe de 2026. Une récente étude de la Commission Européenne
+        documente ces phénomènes dans les 27 pays de l'Union : un peu plus d'un Européen sur dix
+        se sent seul, ce chiffre variant de moins de 10 % en Espagne à 20 % en Grèce
+        (Schnepf, D'Hombres &amp; Mauri, 2024).
+      </p>
+
+      <div class="stat-row">
+        <div class="stat">
+          <span class="stat-number">1/10</span>
+          <span class="stat-label">Européens se sentant seuls<br />(Commission Européenne, 2024)</span>
+        </div>
+        <div class="stat">
+          <span class="stat-number">20 %</span>
+          <span class="stat-label">Taux de solitude<br />en Grèce</span>
+        </div>
+        <div class="stat">
+          <span class="stat-number">145</span>
+          <span class="stat-label">Secteurs statistiques<br />analysés à Bruxelles</span>
+        </div>
+      </div>
+
+      <p>
+        Cependant, plus qu'une caractéristique culturelle à l'échelle d'une nation, l'isolement
+        social dépend surtout de l'environnement local immédiat. Comme le montra très bien
+        Klinenberg à Chicago, deux quartiers pourtant très proches peuvent avoir un tissu social
+        très différent et résister différemment à des événements dramatiques.
+      </p>
+
+      <p>
+        Lorsqu'il n'est pas possible de recourir à des enquêtes, de nombreuses études utilisent
+        le taux de personnes vivant seules comme proxy de l'isolement social (Fritsch, Riederer
+        &amp; Seewann, 2023 ; Burlina &amp; Rodríguez-Pose, 2023). Si vivre seul ne veut pas
+        nécessairement dire être isolé, cela constitue néanmoins un facteur de risque à prendre
+        en compte (Lykes &amp; Kemmelmeier, 2013).
+      </p>
+
+      <p>
+        C'est ce qu'ont entrepris récemment Benassi et Iglesias-Pascual (2025), qui ont analysé
+        la distribution spatiale des personnes vivant seules dans les quatre plus grandes villes
+        espagnoles. Leurs résultats montrent que les liens entre isolement et revenus, immigration
+        européenne ou structure démographique varient d'une ville à l'autre et, surtout,
+        <em>au sein des villes elles-mêmes</em>. Le reste de cet article adapte cette méthodologie
+        à Bruxelles, à partir des données ouvertes de perspective.brussels.
+      </p>
+    </section>
+
+    <section id="donnees">
+      <h2>Source de données</h2>
+
+      <p>
+        Le service de planification de la Région Bruxelles-Capitale,
+        <a href="https://perspective.brussels">perspective.brussels</a>, met à disposition sur
+        <a href="https://monitoringdesquartiers.brussels">monitoringdesquartiers.brussels</a>
+        plus de cent indicateurs sur les trois dernières décennies, déclinés pour trois niveaux
+        géographiques : communes, quartiers et secteurs statistiques. Pour la présente analyse,
+        les données suivantes ont été utilisées au niveau du secteur statistique (2021) :
+      </p>
+
+      <ul>
+        <li>Part des isolés de 30 ans et plus dans le total des ménages privés <em>(variable dépendante)</em></li>
+        <li>Distance moyenne d'accès aux 4 biens de base (pain, viande, alimentation, pharmacie)</li>
+        <li>Part de la population originaire de l'Europe des 14 (hors Belgique)</li>
+        <li>Part des 30–44 ans dans la population</li>
+        <li>Part des 65 ans et plus dans le total des ménages privés</li>
+        <li>Part des logements ayant accès à un jardin privé</li>
+        <li>Revenu équivalent médian après impôts</li>
+        <li>Taux annuel moyen de croissance de la population (2016–2021)</li>
+      </ul>
+
+      <figure class="fig">
+        <img src="assets/images/summary_statistics_table.png"
+             alt="Statistiques descriptives"
+             onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';" />
+        <div class="fig-placeholder">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
+          <span class="fig-placeholder-label">summary_statistics_table.png</span>
+        </div>
+        <figcaption><strong>Tableau 1 :</strong> Statistiques descriptives des variables utilisées.</figcaption>
+      </figure>
+
+      <p>
+        Comme le montre la matrice de corrélation ci-dessous, certaines variables sont très
+        fortement corrélées — notamment le taux de végétalisation avec le revenu et la distance
+        aux biens de base. Nous avons néanmoins conservé ces indicateurs car ils représentent
+        des prismes différents sur la qualité de vie locale.
+      </p>
+
+      <figure class="fig fig-wide">
+        <img src="assets/images/correlation_matrix.png"
+             alt="Matrice de corrélation"
+             onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';" />
+        <div class="fig-placeholder" style="min-height:260px;">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg>
+          <span class="fig-placeholder-label">correlation_matrix.png</span>
+        </div>
+        <figcaption><strong>Figure 1 :</strong> Matrice de corrélation des variables utilisées.</figcaption>
+      </figure>
+    </section>
+
+    <section id="isolement">
+      <h2>L'isolement à Bruxelles</h2>
+
+      <p>
+        L'isolement des plus de 30 ans est particulièrement élevé dans le sud du Pentagone,
+        notamment dans le quartier des Marolles, et dans les communes de Saint-Gilles, Ixelles
+        et Etterbeek. Ces quartiers sont connus pour accueillir une population jeune et aisée,
+        en particulier autour des institutions européennes.
+      </p>
+
+      <figure class="fig fig-wide">
+        <img src="assets/images/part-des-isoles-de-30-ans-et-plus-dans-le-total-des-menages-prives.png"
+             alt="Part des isolés de 30 ans et plus"
+             onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';" />
+        <div class="fig-placeholder" style="min-height:360px;">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/><circle cx="12" cy="9" r="2.5"/></svg>
+          <span class="fig-placeholder-label">part-des-isoles-de-30-ans-et-plus-dans-le-total-des-menages-prives.png</span>
+        </div>
+        <figcaption><strong>Figure 2 :</strong> Part des isolés de 30 ans et plus dans le total des ménages privés (2021).</figcaption>
+      </figure>
+
+      <p>
+        L'isolement à Bruxelles semble donc surtout lié à une population aisée et dynamique,
+        associée aux quartiers tendance et attractifs. Pour documenter plus en détail cette
+        hypothèse, la même méthodologie que Benassi et Iglesias-Pascual (2025) peut être
+        appliquée pour analyser la relation entre l'isolement et les autres variables retenues.
+      </p>
+    </section>
+
+    <section id="ols">
+      <h2>Régression linéaire (OLS)</h2>
+
+      <p>
+        La régression linéaire est une méthode statistique classique permettant de trouver les
+        coefficients des variables qui expliquent au mieux les résultats. Ces coefficients sont
+        <em>communs à toutes les observations</em> : la méthode minimise la somme des différences
+        entre valeur prédite et valeur réelle. Pour faciliter la comparaison entre variables,
+        chacune a été standardisée autour d'une moyenne de 0 et d'un écart-type de 1.
+      </p>
+
+      <figure class="fig">
+        <img src="assets/images/ols_results_table.png"
+             alt="Résultats OLS"
+             onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';" />
+        <div class="fig-placeholder" style="min-height:220px;">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
+          <span class="fig-placeholder-label">ols_results_table.png</span>
+        </div>
+        <figcaption><strong>Tableau 2 :</strong> Résultats de la régression linéaire (OLS). Variables standardisées.</figcaption>
+      </figure>
+
+      <p>
+        Le modèle OLS attribue un coefficient significatif à 9 des 13 variables et explique
+        un R² de 73 % de la variabilité de l'isolement. Cependant, avant d'aller plus loin,
+        deux problèmes méritent d'être signalés : la non-normalité des résidus et la
+        multicolinéarité entre certaines variables.
+      </p>
+
+      <p>
+        De plus, un test de Moran's I révèle la présence d'autocorrélation spatiale : si un
+        secteur présente une forte part de personnes isolées, ses voisins auront toutes les
+        chances d'en présenter une aussi. L'OLS ne prenant pas en compte cette dépendance
+        géographique, une autre méthode s'impose.
+      </p>
+    </section>
+
+    <section id="gwr">
+      <h2>Régression spatiale (GWR)</h2>
+
+      <p>
+        La <em>Geographical Weighted Regression</em> (GWR) prend en compte la dépendance entre
+        un secteur et ses voisins en produisant un coefficient <em>par variable et par secteur</em>.
+        Ce coefficient représente l'association locale entre le taux d'isolement et chaque variable.
+        Un coefficient élevé et positif pour le revenu dans un quartier signifie que l'isolement
+        dans ce quartier s'explique davantage par la présence de hauts revenus que dans les
+        quartiers voisins.
+      </p>
+
+      <figure class="fig">
+        <img src="assets/images/ols_synthesis_table.png"
+             alt="Résultats GWR"
+             onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';" />
+        <div class="fig-placeholder" style="min-height:220px;">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
+          <span class="fig-placeholder-label">ols_synthesis_table.png</span>
+        </div>
+        <figcaption><strong>Tableau 3 :</strong> Résultats de la GWR — résumé des coefficients locaux.</figcaption>
+      </figure>
+
+      <p>
+        Toutes les variables sont significativement associées à la part d'individus isolés.
+        La variable avec la plus forte association est la part de personnes de plus de 65 ans,
+        positive partout — ce qui s'explique par le lien structurel entre vieillissement et
+        vie seule. La part de logements avec jardin privé est également fortement liée, mais
+        négativement, en particulier dans les quartiers denses du centre.
+      </p>
+
+      <figure class="fig fig-wide">
+        <img src="assets/images/gwr_local_r2.png"
+             alt="R² local GWR"
+             onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';" />
+        <div class="fig-placeholder" style="min-height:320px;">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/><circle cx="12" cy="9" r="2.5"/></svg>
+          <span class="fig-placeholder-label">gwr_local_r2.png</span>
+        </div>
+        <figcaption><strong>Figure 3 :</strong> R² local du modèle GWR par secteur statistique. Le modèle performe mieux à l'ouest qu'à l'est de la ville.</figcaption>
+      </figure>
+
+      <p>
+        Comme le montrent les cartes de coefficients, l'effet des variables varie considérablement
+        d'un quartier à l'autre. L'influence de la part de personnes issues de l'Europe des 14
+        est négative à la périphérie est et ouest de la ville — où les expatriés s'installent
+        davantage en famille dans des quartiers résidentiels — tandis qu'elle est positive dans
+        le centre, le sud et le nord. On remarque une association exceptionnellement élevée dans
+        les quartiers nord, probablement du fait des expatriés travaillant pour l'OTAN.
+      </p>
+
+      <figure class="fig fig-wide">
+        <img src="assets/images/gwr_local_coefficients.png"
+             alt="Coefficients GWR locaux"
+             onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';" />
+        <div class="fig-placeholder" style="min-height:400px;">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/><circle cx="12" cy="9" r="2.5"/></svg>
+          <span class="fig-placeholder-label">gwr_local_coefficients.png</span>
+        </div>
+        <figcaption><strong>Figure 4 :</strong> Coefficients GWR par secteur statistique — chaque carte représente l'association locale d'une variable avec le taux d'isolement.</figcaption>
+      </figure>
+
+      <p>À travers ces cartes, deux histoires d'isolement se dégagent.</p>
+
+      <p>
+        <strong>Au sud de Bruxelles</strong>, l'isolement est fortement associé aux populations
+        des 30–44 ans et des 65 ans et plus, peu lié à l'accès aux biens de base, et reste corrélé
+        à des revenus relativement faibles. L'isolement y est probablement le fait de personnes
+        dynamiques socialement, prêtes à sacrifier une partie de leur revenu pour habiter des
+        quartiers centraux riches en aménités. Le niveau de vulnérabilité de ces personnes est
+        plus faible ; lors d'événements climatiques extrêmes, des politiques de prévention et
+        d'information devraient suffire.
+      </p>
+
+      <div class="pullquote">
+        <p>
+          Dans les quartiers précarisés du nord et le long du canal, l'isolement est le fait de
+          personnes âgées, éloignées des biens de base, sans jardin privé — une vulnérabilité
+          particulièrement aiguë en période de canicule.
+        </p>
+      </div>
+
+      <p>
+        <strong>Au nord de Bruxelles et le long du canal</strong>, un autre profil apparaît.
+        L'isolement y est fortement lié à la présence de personnes âgées, à la distance aux
+        biens de base, et à l'absence de jardin privé. L'association avec la croissance de la
+        population est négative. Ces quartiers plus précarisés représentent une population
+        particulièrement vulnérable aux événements extrêmes — notamment les canicules — et
+        nécessitent des politiques plus actives : passages de voisinage, distribution d'eau,
+        accès à des espaces réfrigérés.
+      </p>
+    </section>
+
+    <section id="conclusion">
+      <h2>Conclusion</h2>
+
+      <p>
+        L'isolement est important à mesurer car il est lié à de nombreuses vulnérabilités
+        économiques, sociales et sanitaires. En particulier, les crises climatiques présentent
+        moins de risques dans les quartiers avec un tissu social robuste.
+      </p>
+
+      <p>
+        L'analyse spatiale de l'isolement est difficile à conduire avec les méthodes statistiques
+        traditionnelles, qui ne prennent pas en compte les dépendances entre secteurs géographiques.
+        À l'image de Benassi et Iglesias-Pascual (2025) pour les métropoles espagnoles, la GWR
+        permet de mieux caractériser l'isolement à Bruxelles, quartier par quartier.
+      </p>
+
+      <p>
+        Si la GWR confirme que l'association entre isolement, personnes âgées et accès à un
+        jardin privé est présente sur tout le territoire bruxellois, elle met en évidence des
+        différences marquées entre quartiers : la part de personnes isolées est particulièrement
+        sensible à la distance aux biens de base dans les quartiers d'affaires du centre et du
+        nord, tandis que la présence d'expatriés européens joue différemment selon les zones.
+      </p>
+
+      <p>
+        Enfin, la GWR décrit deux dynamiques d'isolement à Bruxelles : l'une, au sud, liée à
+        des populations actives dans des quartiers bien connectés, avec un niveau de vulnérabilité
+        plus faible ; l'autre, au nord et le long du canal, associée à des personnes âgées
+        précarisées, dans des zones moins bien desservies, qui représentent la priorité pour des
+        politiques urbaines actives de lutte contre l'isolement.
+      </p>
+    </section>
+
+    <section id="references" class="references">
+      <p class="references-label">Références</p>
+      <ol>
+        <li>Audard, F., Le Campion, G. &amp; Pierson, J. (2024). La régression géographiquement pondérée : GWR. <em>Rzine</em>. <a href="https://doi.org/10.48645/wk1m-hg05">doi:10.48645/wk1m-hg05</a></li>
+        <li>Benassi, F. &amp; Iglesias-Pascual, R. (2025). A local regression approach to studying single-person households. <em>Annals of Operations Research</em>. <a href="https://doi.org/10.1007/s10479-025-06595-8">doi:10.1007/s10479-025-06595-8</a></li>
+        <li>Benjamini, Y. &amp; Hochberg, Y. (1995). Controlling the false discovery rate. <em>Journal of the Royal Statistical Society Series B</em>, 57(1), 289–300.</li>
+        <li>Burlina, C. &amp; Rodríguez-Pose, A. (2023). Alone and lonely. <em>Environment and Planning A</em>, 55(8), 2067–2087.</li>
+        <li>Fotheringham, A. S., Brunsdon, C. &amp; Charlton, M. (2003). <em>Geographically weighted regression.</em> John Wiley &amp; Sons.</li>
+        <li>Fritsch, N.-S., Riederer, B. &amp; Seewann, L. (2023). Living alone in the city. <em>Applied Research in Quality of Life</em>, 18(4), 2065–2087.</li>
+        <li>Kim, Y.-K. &amp; Kim, D. (2024). Role of social infrastructure in social isolation. <em>Land</em>, 13, 1260.</li>
+        <li>Klinenberg, E. (2022). <em>Canicule. Chicago, été 1995.</em> Éditions deux-cent-cinq.</li>
+        <li>Lykes, V. A. &amp; Kemmelmeier, M. (2013). What predicts loneliness? <em>Journal of Cross-Cultural Psychology</em>.</li>
+        <li>Schnepf, S. V., D'Hombres, B. &amp; Mauri, C. (2024). Loneliness in Europe. <em>Population Economics</em>. <a href="https://doi.org/10.1007/978-3-031-66582-0">doi:10.1007/978-3-031-66582-0</a></li>
+      </ol>
+    </section>
+
+  </article>
+</div>
+
+<footer>
+  <p>
+    Données : <a href="https://monitoringdesquartiers.brussels">monitoringdesquartiers.brussels</a> · perspective.brussels<br />
+    Code source : <a href="https://github.com/antoineverhulst/brussels_loneliness_gwr">github.com/antoineverhulst/brussels_loneliness_gwr</a>
+  </p>
+</footer>
+
+</body>
+</html>
