@@ -17,13 +17,69 @@ documentation.
 
 ---
 
+## 0. Instructions for Claude Code
+
+**Before writing any notebook cell, do these steps in order:**
+
+### 0.1 Inspect data first
+
+Fetch and inspect all endpoints in parallel before scaffolding anything.
+For each endpoint check:
+- Feature count (do all layers have the same number of sectors?)
+- Value ranges (are shares between 0–100? could any be raw counts?)
+- Whether `content-disposition` headers are present
+  (→ determines whether to use §1.4 pivot or §1.7 multi-endpoint merge)
+- Null counts per variable
+
+```
+Use WebFetch or requests.head() on each URL.
+Log: url | varname | n_features | value_min | value_max | has_content_disposition
+```
+
+### 0.2 Choose the loading pattern
+
+| Situation | Pattern to use |
+|---|---|
+| Single endpoint, long-format, `content-disposition` present | §1.4 + §1.5 (pivot) |
+| One URL per variable (most open-data portals) | §1.7 (multi-endpoint merge) |
+| Local CSV / shapefile / GeoJSON | §1.6 |
+
+### 0.3 Fixed notebook cell order
+
+Always produce cells in this exact order. Do not add or reorder cells.
+
+```
+Cell 1  — Imports                          (§1.1)
+Cell 2  — Configuration + DATASETS + VAR_LABELS  (§1.2)
+Cell 3  — Data fetch                       (§1.3 or §1.6)
+Cell 4  — Build wide-format GeoDataFrame   (§1.4+1.5 or §1.7)
+Cell 5  — Data validation + RUN_GWR gate   (§1.8)
+Cell 6  — Descriptive maps
+Cell 7  — Correlation screen + variable selection  (§3)
+Cell 8  — Prepare regression data (dropna, standardise, gdf_gwr, coords)  (§6.0)
+Cell 9  — OLS global model
+Cell 10 — Moran's I on OLS residuals  → decides whether GWR is warranted  (§4)
+Cell 11 — Bandwidth selection              (§5, gated by RUN_GWR)
+Cell 12 — GWR fitting loop                 (§6.1, gated by RUN_GWR)
+Cell 13 — Moran's I on local coefficients  (§6.2, gated by RUN_GWR)
+Cell 14 — FDR + CN masking                 (§7, gated by RUN_GWR)
+Cell 15 — Local R² map                     (gated by RUN_GWR)
+Cell 16 — Masked coefficient maps          (§7.4, gated by RUN_GWR)
+Cell 17 — OLS results table                (§8)
+Cell 18 — GWR summary table                (§8, gated by RUN_GWR)
+```
+
+---
+
 ## 1. Complete Workflow
 
 ```
-API fetch → GeoDataFrame (EPSG:31370) → Visualize metrics
-    → Summary stats → Correlation screen → Standardize
-    → OLS + Moran's I → GWR (manual sklearn) → CN diagnosis
-    → FDR significance → Masked maps → Synthesis table
+Inspect data → choose loading pattern → wide GeoDataFrame
+    → validate + set RUN_GWR → descriptive maps
+    → correlation screen → standardise
+    → OLS + Moran's I on residuals → [if RUN_GWR]:
+        bandwidth → GWR fitting → Moran's I on coefs
+        → FDR + CN masking → masked maps → synthesis table
 ```
 
 ### 1.1 Imports
@@ -57,12 +113,27 @@ import os
 
 # ── Analysis Parameters ───────────────────────────────────────────────────
 DEPENDENT_VAR      = 'your_snake_case_var_name'
-GWR_BANDWIDTH      = 5000          # metres in projected CRS (or use Sel_BW — see §4)
+GWR_BANDWIDTH      = 5000          # metres in projected CRS (or use Sel_BW — see §5)
 CORR_THRESHOLD     = 0.7           # |r| above which variables are flagged
 CN_THRESHOLD       = 10            # Benassi & Iglesias-Pascual (2025) recommend 10
 SIGNIFICANCE_LEVEL = 0.05
 N_WORKERS          = 10
 REQUEST_TIMEOUT    = 15
+TARGET_CRS         = 'EPSG:31370'  # projected CRS in metres — change for your country
+
+# ── Dataset registry ──────────────────────────────────────────────────────
+# Tuple: (url, snake_case_varname, human_readable_label)
+# First entry = dependent variable; rest = independent variables.
+DATASETS = [
+    ('https://...', 'dep_var_name',      'Dependent variable (units)'),
+    ('https://...', 'indep_var_name_1',  'Predictor 1 (units)'),
+    ('https://...', 'indep_var_name_2',  'Predictor 2 (units)'),
+]
+
+# ── Human-readable labels ─────────────────────────────────────────────────
+# Used in ALL maps, tables, and axis titles from Cell 6 onward.
+# Define here so every downstream cell can do VAR_LABELS.get(var, var).
+VAR_LABELS = {d[1]: d[2] for d in DATASETS}
 
 # ── Output Directories ─────────────────────────────────────────────────────
 OUT_FIGURES = 'outputs/figures'
@@ -75,38 +146,50 @@ for d in [OUT_FIGURES, OUT_DATA, OUT_MAPS, OUT_MASKED]:
 ```
 
 **Why:** Centralising all tunable numbers means one cell to touch when
-re-running with different parameters. `OUT_*` constants make all downstream
-`savefig` / `to_csv` calls self-documenting.
+re-running with different parameters. `DATASETS` is the single source of truth
+for URLs, variable names, and labels — `VAR_LABELS` is derived from it
+automatically so it is always in sync. Defining `VAR_LABELS` here (not in §8)
+means map titles and axis labels work from Cell 6 onward.
 
 ### 1.3 Parallel API fetch
 
+Use `fetch_dataset(url, varname)` — varname is always **explicit** from the
+`DATASETS` registry, never parsed from response headers. Many APIs (including
+most open-data portals) do not set `content-disposition`; relying on it silently
+crashes or produces garbage variable names.
+
 ```python
-def fetch_geojson(url):
-    """Fetch GeoJSON data from an API endpoint."""
+def fetch_dataset(url, varname):
+    """Fetch one GeoJSON endpoint. varname comes from DATASETS, not headers."""
     try:
-        response = requests.get(url, timeout=REQUEST_TIMEOUT)
-        if response.status_code == 200:
-            filename = (response.headers.get('content-disposition', '')
-                        .split('filename=')[-1].strip('"\''))
-            return {'url': url, 'filename': filename,
-                    'data': response.json(), 'status': 'valid', 'error': None}
-        return {'url': url, 'filename': None, 'data': None,
-                'status': 'failed', 'error': f'HTTP {response.status_code}'}
+        r = requests.get(url, timeout=REQUEST_TIMEOUT)
+        r.raise_for_status()
+        return {'varname': varname, 'data': r.json(), 'status': 'ok', 'error': None}
     except Exception as e:
-        return {'url': url, 'filename': None, 'data': None,
-                'status': 'failed', 'error': str(e)}
+        return {'varname': varname, 'data': None, 'status': 'failed', 'error': str(e)}
 
 with ThreadPoolExecutor(max_workers=N_WORKERS) as executor:
-    results = list(executor.map(fetch_geojson, urls))
+    raw_results = list(executor.map(lambda d: fetch_dataset(d[0], d[1]), DATASETS))
 
-valid_results = [r for r in results if r['status'] == 'valid']
+failed = [r for r in raw_results if r['status'] != 'ok']
+if failed:
+    for f in failed: print(f'FAILED {f["varname"]}: {f["error"]}')
+
+valid_results = [r for r in raw_results if r['status'] == 'ok']
+print(f'{len(valid_results)}/{len(DATASETS)} endpoints fetched successfully')
 ```
 
-### 1.4 Build GeoDataFrame
+### 1.4 Build GeoDataFrame (single long-format endpoint → pivot)
+
+Use this pattern **only** when a single endpoint returns all variables in
+long format (one row per sector × variable, with `metric_name` and `value`
+columns). It requires the API to set a `content-disposition` header with a
+descriptive filename.
 
 ```python
 def extract_metadata(filename):
-    """Extract year, area type, and metric name from an API filename."""
+    """Extract year, area type, and metric name from an API filename.
+    REQUIRES content-disposition header — not available on all APIs."""
     import re
     parts = filename.replace('.geojson', '').split('_')
     year = next((int(p) for p in parts if re.match(r'^\d{4}$', p)), None)
@@ -131,12 +214,10 @@ for result in valid_results:
         })
 
 # CRITICAL: use a projected CRS (metres) for GWR bandwidth to be meaningful
-# EPSG:31370 = Belgian Lambert 72. Use your country's national CRS.
-# Re-project to EPSG:4326 ONLY for display.
 gdf = gpd.GeoDataFrame(all_data, crs='EPSG:31370')
 ```
 
-### 1.5 Pivot to analysis-ready wide format
+### 1.5 Pivot to analysis-ready wide format (single long-format endpoint)
 
 ```python
 analysis_df = gdf.pivot_table(
@@ -149,6 +230,48 @@ analysis_df = gdf.pivot_table(
 # Normalise column names — API filenames use hyphens
 analysis_df.columns = [col.replace('-', '_') for col in analysis_df.columns]
 ```
+
+### 1.7 Multi-endpoint merge (one URL per variable — the common case)
+
+Use this pattern when each variable comes from a **separate API endpoint**
+(e.g. perspective.brussels, most national open-data portals). Variable names
+come from `DATASETS` — no header parsing needed.
+
+```python
+gdfs = {}
+for result in valid_results:
+    varname = result['varname']
+    rows = [
+        {
+            'id'      : str(feat.get('id', feat['properties'].get('id', ''))),
+            'name'    : feat['properties'].get('name', ''),
+            'geometry': shape(feat['geometry']),
+            varname   : feat['properties'].get('value'),
+        }
+        for feat in result['data']['features']
+    ]
+    gdfs[varname] = gpd.GeoDataFrame(rows, crs='EPSG:31370')
+    print(f'{varname}: {len(gdfs[varname])} features, '
+          f'{gdfs[varname][varname].isna().sum()} nulls')
+
+# Inner join — only keep sectors present in ALL layers
+# Log before/after: inner join silently drops sectors missing from any layer
+gdf_merged = gdfs[DEPENDENT_VAR][['id', 'name', 'geometry', DEPENDENT_VAR]]
+indep_var_names = [d[1] for d in DATASETS if d[1] != DEPENDENT_VAR]
+for varname in indep_var_names:
+    gdf_merged = gdf_merged.merge(
+        gdfs[varname][['id', varname]], on='id', how='inner'
+    )
+
+print(f'\nAfter inner join: {len(gdf_merged)} sectors '
+      f'(started with {max(len(g) for g in gdfs.values())})')
+gdf_merged = gdf_merged.set_geometry('geometry').set_crs('EPSG:31370')
+```
+
+**Key differences from the pivot pattern:**
+- Feature counts often differ per layer — always log the before/after count
+- No `content-disposition` header → no `extract_metadata()` → names from `DATASETS`
+- Result is already wide-format; no pivot step needed
 
 ### 1.6 Alternative: Loading Data from File
 
@@ -189,6 +312,60 @@ Never run GWR in EPSG:4326 (degrees) — the bandwidth will be meaningless.
 The result in all three cases is a wide-format GeoDataFrame with one row per
 geographic unit (sector / municipality / ward) and one column per variable,
 matching the format produced by §1.5.
+
+### 1.8 Data validation and RUN_GWR gate
+
+Always run this cell immediately after loading data — before any analysis.
+`RUN_GWR` is a boolean used to skip all GWR-specific cells when sample size
+is too small (see gate pattern below).
+
+```python
+all_vars = [DEPENDENT_VAR] + [d[1] for d in DATASETS if d[1] != DEPENDENT_VAR]
+
+# 1. Summary statistics
+print(gdf_merged[all_vars].describe().round(2).to_string())
+
+# 2. Value-range anomaly check — flag variables that look like counts not shares
+print('\nValue-range check:')
+for var in all_vars:
+    v = gdf_merged[var].dropna()
+    if v.max() > 200:
+        print(f'  WARNING: {VAR_LABELS.get(var, var)} max={v.max():.0f} '
+              f'— may be a raw count rather than a % share')
+
+# 3. Null counts after merge
+print('\nNulls per variable:')
+print(gdf_merged[all_vars].isna().sum().to_string())
+
+# 4. Sample size gate
+n_complete = gdf_merged[all_vars].dropna().shape[0]
+print(f'\nComplete observations: {n_complete}')
+
+if n_complete < 100:
+    print('WARNING: n < 100. GWR is not reliable. Proceeding with OLS only.')
+    RUN_GWR = False
+elif n_complete < 300:
+    print('CAUTION: n < 300. GWR results are exploratory only.')
+    RUN_GWR = True
+else:
+    print(f'n = {n_complete} >= 300. GWR is appropriate.')
+    RUN_GWR = True
+
+print(f'\nRUN_GWR = {RUN_GWR}')
+```
+
+**Gate pattern — add this at the top of every GWR-specific cell:**
+
+```python
+if not RUN_GWR:
+    print('Skipped — RUN_GWR=False (n < 100). See OLS results above.')
+else:
+    pass  # cell body here
+```
+
+GWR-specific cells: bandwidth selection, GWR fitting loop, Moran's I on
+coefficients, FDR + CN masking, local R² map, masked coefficient maps,
+GWR summary table.
 
 ---
 
